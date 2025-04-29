@@ -1,0 +1,388 @@
+---
+title: "Project Script"
+output: html_document
+---
+
+Necessary Libraries (may need to install if not already done)
+```{r}
+library(ggmap)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(sf)
+library(mapview)
+library(maps)
+library(mapdata)
+library(ggplot2)
+library(sf)
+library(viridis)
+library(readxl)
+```
+
+Uploading and naming data. These are my pathways and will be different for each individual attempting recreation. DO NOT USE. The key thing here will be using the sheets = "" for your own pathway as the data set cannot be uploaded as a whole. Each sheet contains data from a different survey and cannot be distinguished if the entire data set is updated as one.  
+```{r}
+shrimpSM <- read_excel("Desktop/Data For Project.xlsx", 
+    sheet = "Seamap")
+View(Data_For_Project)
+
+shrimpNM <- read_excel("Desktop/Data For Project.xlsx", 
+    sheet = "Neamap")
+View(Data_For_Project)
+
+shrimpNM <- read_excel("Desktop/Data For Project.xlsx", 
+    sheet = "Chesmap")
+View(Data_For_Project)
+```
+Key points: anything with SM in the title is from Seamap, NM is from Neamap and CM is from Chesmmap. Keeping any names straight is essentia and keeping names the same with only the survey initials changing has made it easier to make code for one survey and easily edit to fit the others. 
+
+
+Summarize Data
+```{r}
+summary(shrimpSM)
+summary(shrimpNM)
+summary(shrimpCM)
+```
+
+Map Survey Locations 
+```{r}
+##create a map of all the states to be included in the map
+combinedmapregions <- map_data("state", region = c("florida","georgia",
+        "south carolina","north carolina", "virginia","delaware", "maryland",
+        "new jersey","pennsylvania","new york", "connecticut","rhode island", 
+        "massachusetts", "ohio", "west virginia"))
+```
+```{r}
+##create the map 
+ggplot()+
+geom_polygon(data = combinedmapregions, aes(x = long, y = lat, group = group), fill = "lightgray", color = "black") + ##creates an outline of the states
+  geom_point(data = shrimpSM, 
+                           aes(x = ELON, y = ELAT), fill="lightblue", color="blue", size=0.5, shape=21, stroke=0.25) +  ##includes seamap data on the map
+   geom_point(data = shrimpNM, aes(x = lon, y = lat), fill="green", color="darkgreen", size=0.5, shape=21, stroke=0.25) + ##includes neamap data on the map
+   geom_point(data = shrimpCM, aes(x = lon, y = lat), fill="yellow", color="orange", size=0.5, shape=21, stroke=0.25) + ##includes chesmmap data on the map 
+  facet_wrap(vars(YEAR)) + ##creates a map for each year in the survey 
+  theme_minimal() + 
+  labs(title = "Shrimp Trawl Locations in the South Atlantic by Year", x = "Longitude (°W)", y = "Latitude (°N)") +
+  theme(legend.position = "none",
+        axis.text.x = element_text(size = 7, angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 7)) + ##sets theme specifics
+  coord_cartesian(xlim = c(-81.5, -71.0), ylim = c(28.0, 41.5)) ##focuses the maps to be more centered around the data 
+```
+
+Map of where shrimp were actually caught and their abundances at those locations. Code is only included for Neamap. Will be repeated for seamap and chesmap but only Neamap is shown below for ease of moving on to statistical analysis.
+```{r}
+shrimpNMsf<- st_as_sf(shrimpNM, coords = c("lon", "lat"), crs = 4326)
+breaksNM <- seq(min(shrimpNM$count, na.rm = TRUE), max(shrimpNM$count, na.rm = TRUE), by = 20)
+world_mapNM <- st_as_sf(maps::map("state", regions = c("north carolina","virginia","delaware", "maryland","new jersey","pennsylvania","new york",                       "connecticut","rhode island", "massachusetts"), plot = FALSE, fill = TRUE))
+shrimpNMsf$Abundance_Category <- cut(shrimpNMsf$count, 
+                                     breaks = c(0, 200, 400, 600, 800, 1000, 2000, 3000, 4000, Inf), 
+                                     labels = c("0", "1-200", "201-400", "401-600", "601-800", "801-1000", "1001-2000", "2001-3000", "3001-4000+"))
+
+shrimpNMsf_filtered <- shrimpNMsf %>% filter(Abundance_Category != 0)
+shrimpNMabundance <- ggplot(shrimpNMsf_filtered) +
+  geom_sf(data = world_mapNM, fill = "lightgray", color = "black") +
+  geom_sf(aes(color = Abundance_Category), size = 0.5) + 
+  facet_wrap(vars(YEAR))+
+  scale_color_manual(values = c("blue", "lightblue", "turquoise", "green", "darkgreen", "pink", "magenta", "red", "purple"), name = "Abundance") +
+  labs(title = "Shrimp Abundance Map", 
+       x = "Longitude", 
+       y = "Latitude", 
+       color = "Abundance (count)") +
+  theme_minimal() + 
+  theme(legend.position = "right",
+        axis.text.x = element_text(size = 7, angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 9)) +
+  coord_sf(xlim = c(-76.5, -70.0), ylim = c(35.0, 42.0))
+shrimpNMabundance
+```
+
+Calculate the total number caught per year 
+```{r}
+shrimpSMtotals <- aggregate(TOWTOTAL ~ YEAR, data = shrimpSM, sum)
+shrimpSMtotals
+
+shrimpNMtotals <- aggregate(count ~ YEAR, data = shrimpNM, sum)
+shrimpNMtotals
+
+shrimpCMtotals <- aggregate(count ~ YEAR, data = shrimpCM, sum)
+shrimpCMtotals
+```
+
+Plot the totals by year 
+```{r}
+shrimpSMtotalplot<-ggplot(shrimpSMtotals, aes(x = YEAR, y = TOWTOTAL)) +
+  geom_line(color = "purple", size = 1) +  
+  labs(title = "SEAMAP L. setiferus",    
+       x = "Year",                      
+       y = "Total Number Caught") +                   
+  theme_minimal()  
+shrimpSMtotalplot
+
+shrimpNMtotalsplot <-ggplot(shrimpNMtotals, aes(x = YEAR, y = count)) +
+  geom_line(color = "purple", size = 1) +  
+  labs(title = "NEAMAP L. setiferus",    
+       x = "Year",                      
+       y = "Total Number Caught") +                   
+  theme_minimal()
+shrimpNMtotalsplot
+
+shrimpCMtotalsplot<- ggplot(shrimpCMtotals, aes(x = YEAR, y = count)) +
+  geom_line(color = "purple", size = 1) +  
+  labs(title = "CHESMMAP L. setiferus",    
+       x = "Year",                      
+       y = "Total Number Caught") +                   
+  theme_minimal()  
+shrimpCMtotalsplot
+```
+Percent Postive Catches
+```{r}
+#SEAMAP
+positive_catch_by_yearSM <- shrimpSM %>%
+  group_by(YEAR) %>%
+  summarise(
+    Total_Trawls = n(),
+    Positive_Catches = sum(TOWTOTAL > 0, na.rm = TRUE),
+    Percent_Positive = (Positive_Catches / Total_Trawls) * 100
+  )
+View(positive_catch_by_yearSM)
+ggplot(positive_catch_by_yearSM, aes(x = YEAR, y = Positive_Catches)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "L. setiferus Catch by Year (SEAMAP)", x = "Year", y = "Positive Catches") +
+  theme_minimal()+
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),
+  )
+#NEAMAP
+positive_catch_by_yearNM <- shrimpNM %>%
+  group_by(YEAR) %>%
+  summarise(
+    Total_Trawls = n(),
+    Positive_Catches = sum(count > 0, na.rm = TRUE),
+    Percent_Positive = (Positive_Catches / Total_Trawls) * 100
+  )
+View(positive_catch_by_yearNM)
+ggplot(positive_catch_by_yearNM, aes(x = YEAR, y = Positive_Catches)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "L. setiferus Catch by Year (NEAMAP)", x = "Year", y = "Positive Catches") +
+  theme_minimal()+
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),
+  )
+
+#ChesMMAP
+positive_catch_by_yearCM <- shrimpCM %>%
+  group_by(YEAR) %>%
+  summarise(
+    Total_Trawls = n(),
+    Positive_Catches = sum(count > 0, na.rm = TRUE),
+    Percent_Positive = (Positive_Catches / Total_Trawls) * 100
+  )
+View(positive_catch_by_yearCM)
+ggplot(positive_catch_by_yearCM, aes(x = YEAR, y = Positive_Catches)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "L. setiferus Catch by Year", x = "Year", y = "Positive Catches") +
+  theme_minimal()+
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),
+  )
+```
+
+
+
+Environmental Parameters: Temperature 
+```{r}
+##calculate averages per year
+shrimpSMtemp<-aggregate(BTEMP ~ YEAR, data = shrimpSM, mean)
+shrimpSMtemp
+
+shrimpNMtemp<-aggregate(WT ~ YEAR, data = shrimpNM, mean)
+shrimpNMtemp
+
+shrimpCMtemp <-aggregate(WT~YEAR, data = shrimpCM, mean)
+shrimpCMtemp
+```
+```{r}
+##plot the averages per year 
+shrimpSMtempplot <- ggplot(shrimpSMtemp, aes(x = YEAR, y = BTEMP)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "SEAMAP Shrimp bottom temp",    
+       x = "Year",                      
+       y = "Average Bottom Tempurature") +                   
+  theme_minimal() 
+shrimpSMtempplot
+
+shrimpNMtempplot <- ggplot(shrimpNMtemp, aes(x = YEAR, y = WT)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "NEAMAP Shrimp bottom temp",    
+       x = "Year",                      
+       y = "Average Bottom Tempurature") +                   
+  theme_minimal() 
+shrimpNMtempplot
+
+shrimpCMtempplot <- ggplot(shrimpCMtemp, aes(x = YEAR, y = WT)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "ChesMMAP Shrimp bottom temp",    
+       x = "Year",                      
+       y = "Average Bottom Tempurature") +                   
+  theme_minimal() 
+shrimpCMtempplot
+```
+
+Environmental Parameters: Salinity 
+```{r}
+##calculate average salinity per year 
+shrimpSMsalinity<-aggregate(BSAL ~ YEAR, data = shrimpSM, mean)
+shrimpSMsalinity
+
+shrimpNMsalinity<-aggregate(SA ~ YEAR, data = shrimpNM, mean)
+shrimpNMsalinity
+
+shrimpCMsalinity<-aggregate(SA~YEAR, data = shrimpCM, mean)
+shrimpCMsalinity
+```
+```{r}
+##plot average salinity per year 
+shrimpSMsalinityplot <- ggplot(shrimpSMsalinity, aes(x = YEAR, y = BSAL)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "SEAMAP Shrimp bottom salinity",    
+       x = "Year",                      
+       y = "Average Bottom Salinity") +                   
+  theme_minimal() 
+shrimpSMsalinityplot
+
+shrimpNMsalinityplot <- ggplot(shrimpNMsalinity, aes(x = YEAR, y = SA)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "NEAMAP Shrimp bottom salinity",    
+       x = "Year",                      
+       y = "Average Bottom Salinity") +                   
+  theme_minimal() 
+shrimpNMsalinityplot
+
+shrimpCMsalinityplot <- ggplot(shrimpCMsalinity, aes(x = YEAR, y = SA)) +
+  geom_line(color = "magenta", size = 1) +  
+  labs(title = "ChesMMAP Shrimp bottom salinity",    
+       x = "Year",                      
+       y = "Average Bottom Salinity") +                   
+  theme_minimal() 
+shrimpCMsalinityplot
+```
+Statistical Analysis 
+-assumptions typically tested for: linearity, normality, independence, constant variance, no multicollinerarity 
+-in this case we know salinity and temperature are linked so we can assume collinearity between these two variables
+-in larger data sets meeting these assumptions are less important
+-the key ones here are going to be to test linearity and normality because this will tell us if we can use a type of linear regression or not as well as if the data may need to be transformed
+-we are expecting to need to use a GAM based on similar studies but we'll try an LM first just to be sure
+```{r}
+##fit a model to get residuals 
+##add the Towtotals from shrimpSMtotals to the shrimpSMtemp data table
+shrimpSMtemp$TOWTOTAL <- shrimpSMtotals$TOWTOTAL
+shrimpNMtemp$count <- shrimpNMtotals$count
+shrimpCMtemp$count <- shrimpCMtotals$count
+```
+
+SEAMAP linear model for temperature
+```{r}
+##fit to a linear model and test residuals 
+shrimpSMlmmodel <- lm(TOWTOTAL~BTEMP, data = shrimpSMtemp)
+summary(shrimpSMlmmodel)
+plot(shrimpSMlmmodel)
+```
+
+NEAMAP linear model for temperature
+```{r}
+shrimpNMlmmodel <- lm(count~WT, data = shrimpNMtemp)
+summary(shrimpNMlmmodel)
+plot(shrimpNMlmmodel)
+```
+
+ChesMMAP linear model for temperature
+```{r}
+shrimpCMlmmodel <- lm(count~WT, data = shrimpCMtemp)
+summary(shrimpCMlmmodel)
+plot(shrimpCMlmmodel)
+```
+
+Results of the above showed some non-normality (which was expected) so the data should be fit to a GAM model. 
+
+SEAMAP generalized additive model for temperature
+```{r}
+library(mgcv)
+shrimpSMtempgam <- gam(TOWTOTAL ~ s(BTEMP), data = shrimpSMtemp)
+summary(shrimpSMtempgam)
+```
+NEAMAP generalized additive model for temperature
+```{r}
+shrimpNMtempgam <- gam(count ~ s(WT), data = shrimpNMtemp)
+summary(shrimpNMtempgam)
+```
+
+ChesMMAP generalized additive model for temperature
+```{r}
+shrimpCMtempgam <- gam(count ~ s(WT), data = shrimpNMtemp)
+summary(shrimpNMtempgam)
+```
+Repeat for salinity
+```{r}
+shrimpSMsalinity$TOWTOTAL <- shrimpSMtotals$TOWTOTAL
+shrimpNMsalinity$count <- shrimpNMtotals$count
+shrimpCMsalinity$count <- shrimpCMtotals$count
+```
+
+SEAMAP linear model for salinity
+```{r}
+shrimpSMlmsalinitymodel <- lm(TOWTOTAL~BSAL, data = shrimpSMsalinity)
+summary(shrimpSMlmsalinitymodel)
+plot(shrimpSMlmsalinitymodel)
+```
+
+NEAMAP linear model for salinity
+```{r}
+shrimpNMlmsalinitymodel <- lm(count~SA, data = shrimpNMsalinity)
+summary(shrimpNMlmsalinitymodel)
+plot(shrimpNMlmsalinitymodel)
+```
+
+ChesMMAP linear model for salinity
+```{r}
+shrimpCMlmsalinitymodel <- lm(count~SA, data = shrimpCMsalinity)
+summary(shrimpCMlmsalinitymodel)
+plot(shrimpCMlmsalinitymodel)
+```
+
+SEAMAP generalized additive model for salinity
+```{r}
+shrimpSMsalinitygam <- gam(TOWTOTAL ~ s(BSAL), data = shrimpSMsalinity)
+summary(shrimpSMsalinitygam)
+```
+
+NEAMAP generalized additive model for salinity
+```{r}
+shrimpNMsalinitygam <- gam(count ~ s(SA), data = shrimpNMsalinity)
+summary(shrimpNMsalinitygam)
+```
+
+ChesMMAP generalized additive model for salinity
+```{r}
+shrimpCMsalinitygam <- gam(count ~ s(SA), data = shrimpNMsalinity)
+summary(shrimpNMsalinitygam)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
