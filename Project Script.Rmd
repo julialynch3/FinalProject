@@ -68,8 +68,34 @@ geom_polygon(data = combinedmapregions, aes(x = long, y = lat, group = group), f
   coord_cartesian(xlim = c(-81.5, -71.0), ylim = c(28.0, 41.5)) ##focuses the maps to be more centered around the data 
 ```
 
-Map of where shrimp were actually caught and their abundances at those locations. Code is only included for Neamap. Will be repeated for seamap and chesmap but only Neamap is shown below for ease of moving on to statistical analysis.
+Map of where shrimp were actually caught and their abundances at those locations. 
 ```{r}
+shrimpSMsf<- st_as_sf(shrimpSM, coords = c("ELON", "ELAT"), crs = 4326)
+breaksSM <- seq(min(shrimpSM$TOWTOTAL, na.rm = TRUE), max(shrimpSM$TOWTOTAL, na.rm = TRUE), by = 20)
+world_mapSM <- st_as_sf(maps::map("state", regions = c("florida","georgia","south carolina","north carolina"), 
+                                  plot = FALSE, fill = TRUE))
+shrimpSMsf$Abundance_Category <- cut(shrimpSMsf$TOWTOTAL, 
+                                     breaks = c(0, 200, 400, 600, 800, 1000, 2000, 3000, 4000, Inf), 
+                                     labels = c("0", "1-200", "201-400", "401-600", "601-800", "801-1000", "1001-2000", "2001-3000", "3001-4000+"))
+
+shrimpSMsf_filtered <- shrimpSMsf %>% filter(Abundance_Category != 0)
+shrimpSMabundance<-ggplot(shrimpSMsf_filtered) +
+  geom_sf(data = world_mapSM, fill = "lightgray", color = "black") +
+  geom_sf(aes(color = Abundance_Category), size = 0.5) + 
+  facet_wrap(vars(YEAR))+
+  scale_color_manual(values = c( "blue", "lightblue", "turquoise", "green", "darkgreen", "pink", "magenta", "red","purple"), 
+                     name = "Abundance") +
+  labs(title = "Shrimp Abundance Map SEAMAP", 
+       x = "Longitude", 
+       y = "Latitude", 
+       color = "Abundance (TOWTOTAL)") +
+  theme_minimal() + 
+  theme(legend.position = "right",
+        axis.text.x = element_text(size = 7, angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 9))+
+  coord_sf(xlim = c(-81.5, -75.0), ylim = c(28.0, 36.0))
+shrimpSMabundance
+
 shrimpNMsf<- st_as_sf(shrimpNM, coords = c("lon", "lat"), crs = 4326)
 breaksNM <- seq(min(shrimpNM$count, na.rm = TRUE), max(shrimpNM$count, na.rm = TRUE), by = 20)
 world_mapNM <- st_as_sf(maps::map("state", regions = c("north carolina","virginia","delaware", "maryland","new jersey","pennsylvania","new york",                       "connecticut","rhode island", "massachusetts"), plot = FALSE, fill = TRUE))
@@ -93,6 +119,32 @@ shrimpNMabundance <- ggplot(shrimpNMsf_filtered) +
         axis.text.y = element_text(size = 9)) +
   coord_sf(xlim = c(-76.5, -70.0), ylim = c(35.0, 42.0))
 shrimpNMabundance
+
+shrimpCMsf<- st_as_sf(shrimpCM_clean, coords = c("lon", "lat"), crs = 4326)
+breaksCM <- seq(min(shrimpCM$count, na.rm = TRUE), max(shrimpCM$count, na.rm = TRUE), by = 20)
+world_mapCM <- st_as_sf(maps::map("state", regions = c("maryland","virginia","delaware"), plot = FALSE, fill = TRUE))
+shrimpCMsf$Abundance_Category <- cut(shrimpCMsf$count, 
+                                     breaks = c(0, 200, 400, 600, 800, 1000, 2000, 3000, 4000, Inf), 
+                                     labels = c("0", "1-200", "201-400", "401-600", "601-800", "801-1000", "1001-2000", "2001-3000", "3001-4000+"))
+shrimpCMsf_filtered <- shrimpCMsf %>% filter(Abundance_Category != 0)
+shrimpCMabundance <- ggplot(shrimpCMsf_filtered) +
+  geom_sf(data = world_mapCM, fill = "lightgray", color = "black") +
+  geom_sf(aes(color = Abundance_Category), size = 1) + 
+  facet_wrap(vars(year))+
+  scale_color_manual(values = c("blue", "lightblue", "turquoise", "green", "darkgreen", 
+                                "pink", "magenta", "red", "purple"), 
+                     name = "Abundance") +
+  labs(title = "L. setiferus Abundance Map (ChesMMAP)", 
+       x = "Longitude", 
+       y = "Latitude", 
+       color = "Abundance (count)") +
+  theme_minimal() + 
+  theme(legend.position = "right",
+        axis.text.x = element_text(size = 7, angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 7),
+        panel.border = element_rect(color = "black", fill = NA, size = 1)) +
+  coord_sf(xlim = c(-76.5, -75.0), ylim = c(36.5, 39.0))
+shrimpCMabundance 
 ```
 
 Calculate the total number caught per year 
